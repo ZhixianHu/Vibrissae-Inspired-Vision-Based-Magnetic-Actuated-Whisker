@@ -1,9 +1,28 @@
+"""
+airflowCharacterizationRealtime.py
+
+Real-time airflow/interaction state classification on Raspberry Pi using the PiCamera.  
+Tracks 8 whisker tip markers, builds short time windows of displacements, and uses FFT + peak/valley features to label each whisker as **Origin / Dynamic / Contact**.
+
+Workflow
+1. Initialize PiCamera (preview config, ~15 FPS via `FrameDurationLimits`) and output folder.
+2. Load reference image `img/org.jpg`, preprocess (mask + undistort), detect 8 red centroids, and fix whisker indexing.
+3. Capture frames → preprocess → track red centroids → compute per-whisker `dx, dy`.
+4. Maintain sliding windows (`N` samples) of `dx, dy, dx+ i·dy`; run `fftProcess` + peak/valley checks in `flowProcess`.
+5. Threshold and smooth to classify each whisker: **Origin / Dynamic / Contact** and overlay labels on the live view.
+
+Usage example:
+    python airflowCharacterizationRealtime.py
+
+Dependencies:
+    opencv-python, numpy, scipy, picamera2, plus local `whiskerTrack`
+"""
+
 import cv2
 import numpy as np
 from scipy.fftpack import fft, ifft
 import copy
 import scipy.signal as signal
-from picamera2 import Picamera2
 import time
 import os
 from whiskerTrack import imgPreProcess, imgRedFindCentroid, imgRedCentroidTrack, rearrangeList
@@ -18,13 +37,13 @@ def fftProcess(list, T, N = 30):
     return xf, 2.0/N * np.abs(yf[0:N//2]), dominant_freq, magnitude_spectrum
 
 def flowProcess(dxL, dyL, dComplexL, dxPeakerFormer, dxValleyFormer, dyPeakerFormer, \
-                dyValleyFormer, T = 1/15, N=30, magThre = 4):
+                dyValleyFormer, T = 1/15, N=30, magThre = 4, numWhisker = 8):
     dxArray = np.array(dxL).T
     dyArray = np.array(dyL).T
     dComplexArray = np.array(dComplexL).T
 
-    staticFlag = [False]*8
-    contactFlag = [False]*8
+    staticFlag = [False]*numWhisker
+    contactFlag = [False]*numWhisker
 
     def findPeakValley(array):
         peakIndex, _ = signal.find_peaks(np.abs(array))
@@ -39,16 +58,16 @@ def flowProcess(dxL, dyL, dComplexL, dxPeakerFormer, dxValleyFormer, dyPeakerFor
             valleyMin = array[0]
         else:
             valleyMin = np.min(valley)
-        return peakMax, valleyMin   
-    
-    dxPeakList = [0] * 8
-    dxValleyList = [0] * 8
-    dyPeakList = [0] * 8
-    dyValleyList = [0] * 8
-    for j in range(8):
+        return peakMax, valleyMin
+
+    dxPeakList = [0] * numWhisker
+    dxValleyList = [0] * numWhisker
+    dyPeakList = [0] * numWhisker
+    dyValleyList = [0] * numWhisker
+    for j in range(numWhisker):
         xf, yf, dominant_freq, magnitude_spectrum = fftProcess(dComplexArray[j], T, N)
         magnitude_spectrum = magnitude_spectrum[1:]
-        print(np.max(magnitude_spectrum))
+        # print(np.max(magnitude_spectrum))
         if np.max(magnitude_spectrum) < 5:
             staticFlag[j] = True
         dxPeak, dxValley = findPeakValley(dxArray[j])
@@ -76,8 +95,12 @@ def dataSmooth(array, arrayFormer, thre):
             array[i] = arrayFormer[i]
     return array
 
+# Experiment parameters
 expID = 0
 expName ='airflow'
+N = 15
+threshold = 1
+
 
 date = time.strftime('%Y-%m-%d', time.localtime(time.time()))
 outputFolder = 'data/' + expName + '_' + str(expID) + '_' + date + '/'
@@ -86,10 +109,10 @@ os.makedirs(outputFolder, exist_ok=True)
 dxFlowDataList = []
 dyFlowDataList = []
 dComplexFlowDataList = []
-N = 15
-threshold = 1
 
 def main():
+
+    from picamera2 import Picamera2
     camera = Picamera2()
     mode = camera.sensor_modes[0]
     config = camera.create_preview_configuration(sensor={'output_size': mode['size'], \
@@ -183,4 +206,7 @@ def main():
             break
         
     cv2.destroyAllWindows()    
-main()
+
+
+if __name__ == "__main__":
+    main()

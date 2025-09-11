@@ -1,0 +1,9 @@
+numpy
+pandas
+matplotlib
+scipy
+opencv-python
+torch
+torchvision
+scikit-learn
+picamera2; platform_system=="Linux" and "arm" in platform_machine()

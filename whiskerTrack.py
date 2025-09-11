@@ -1,3 +1,25 @@
+"""
+whiskerTrack.py
+
+This script provides the main functions to track whisker displacements 
+from images. By comparing the positions of red markers on whisker roots 
+between a reference (initial) image and an input image, the pixel-level 
+movements of each whisker can be extracted.
+
+Workflow:
+1. Load and preprocess the image (mask + undistort).
+2. Detect red markers and calculate their centroids.
+3. Reorder and rearrange detected points to maintain whisker index consistency.
+4. Compare marker positions between reference and input states.
+5. Output pixel displacements (dx, dy) for all whiskers.
+
+Usage example:
+    python whiskerTrack.py
+
+Dependencies:
+    numpy, opencv-python, pandas
+"""
+
 import numpy as np
 import cv2
 import pandas as pd
@@ -5,8 +27,15 @@ import pandas as pd
 polygonMask = cv2.imread("img/polygonMask.png", cv2.IMREAD_GRAYSCALE)
 polygonMask = cv2.merge([polygonMask, polygonMask, polygonMask])
 
-# This function is used to reorder the points in the list
+
 def listReOrder(ptList):
+    """
+    Reorder detected centroid points in-place based on their x-coordinates.
+    Ensures left-right consistency for paired whisker markers.
+    
+    Args:
+        ptList (list of tuples): List of centroid points [(x0, y0), ..., (x7, y7)]
+    """
     if ptList[0][0] < ptList[1][0]:
         mid = ptList[0]
         ptList[0] = ptList[1]
@@ -24,8 +53,16 @@ def listReOrder(ptList):
         ptList[6] = ptList[7]
         ptList[7] = mid
 
-# This function is used to reorder the points in the list
 def rearrangeList(ptList):
+    """
+    Rearrange centroid points into a fixed order that matches whisker IDs.
+    The order is determined by experiment convention to keep whisker indexing consistent.
+    
+    Args:
+        ptList (list of tuples): List of centroid points.
+    Returns:
+        list of tuples: Reordered list with consistent whisker indexing.
+    """
     newList = [None] * 8
     newList[0] = ptList[0]
     newList[1] = ptList[1]
@@ -37,8 +74,18 @@ def rearrangeList(ptList):
     newList[7] = ptList[2]
     return newList
 
-# This function is used to undistort the image
+
 def imgUndistort(frame, calibParaPath = "img/calibration_data.npz"):
+    """
+    Correct lens distortion using pre-calibrated camera parameters.
+    
+    Args:
+        frame (numpy.ndarray): Input image frame.
+        calibParaPath (str): Path to calibration data file (npz).
+    
+    Returns:
+        numpy.ndarray: Undistorted and cropped image.
+    """
     calibPara = np.load(calibParaPath)
     mtx = calibPara['mtx']
     dist = calibPara['dist']
@@ -52,15 +99,47 @@ def imgUndistort(frame, calibParaPath = "img/calibration_data.npz"):
     return frame
 
 def imgPreMaskProcess(frame, mask):
+    """
+    Apply polygon mask to restrict processing area.
+    
+    Args:
+        frame (numpy.ndarray): Input image.
+        mask (numpy.ndarray): Mask image.
+    
+    Returns:
+        numpy.ndarray: Masked image.
+    """  
     frame = cv2.bitwise_and(frame, mask)
     return frame
 
 def imgPreProcess(frame):
+    """
+    Preprocess image: apply polygon mask and undistort.
+    
+    Args:
+        frame (numpy.ndarray): Input raw image.
+    Returns:
+        numpy.ndarray: Processed image ready for whisker tracking.
+    """
     frame = imgPreMaskProcess(frame, polygonMask)
     frame = imgUndistort(frame)
     return frame
 
 def imgRedFindCentroid(frame, minArea = 10, mskID = 0):
+    """
+    Detect red markers (whisker roots) in HSV color space, 
+    filter by contour area, and calculate centroids.
+    
+    Args:
+        frame (numpy.ndarray): Input image frame.
+        minArea (int): Minimum area threshold to filter small contours.
+        mskID (int): Internal flag to try different morphology pipelines.
+    
+    Returns:
+        mask (numpy.ndarray): Binary mask of detected red regions.
+        centerPtList (list of tuples): Centroid coordinates of 8 markers.
+        successFlag (bool): Whether exactly 8 centroids were found.
+    """
     hsvImg = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
     if mskID == 0:
@@ -106,8 +185,6 @@ def imgRedFindCentroid(frame, minArea = 10, mskID = 0):
                 centerPtList.append((cX, cY))
 
     if len(filteredContours) != 8:
-        # print("-----!!! Contour detection failed.--------")
-        # print("contour: ", len(contours), "mskID: ", mskID)
         centerPtList = []
         # cv2.imshow("Img Red", mask)
         # cv2.imshow('Original Frame', frame)
@@ -118,12 +195,6 @@ def imgRedFindCentroid(frame, minArea = 10, mskID = 0):
             print("contour: ", len(contours), "mskID: ", mskID)
             return mask, centerPtList, False
         return imgRedFindCentroid(frame, minArea, mskID+1)
-    # else:
-    #     cv2.imshow("Img Red", mask)
-    #     cv2.imshow('Original Frame', frame)
-    #     cv2.waitKey(2000)
-    # cv2.destroyAllWindows()
-
     listReOrder(centerPtList)
 
     # Visualize the result
@@ -142,7 +213,7 @@ def imgRedFindCentroid(frame, minArea = 10, mskID = 0):
     # cv2.waitKey(0)
     return mask, centerPtList, True
 
-orgImg = cv2.imread("img/org.png")
+orgImg = cv2.imread("img/org.jpg")
 orgImg = imgPreProcess(orgImg)
 
 orgRedMask, orgCenterPtList, orgRedFindFlag = imgRedFindCentroid(orgImg)
@@ -173,6 +244,24 @@ curve_fit_para = [
 curve_fit_para = rearrangeList(curve_fit_para)
 
 def imgRedCentroidTrack(frame, orgCenterPtL, imgPath, minArea = 10):
+    """
+    Track whisker displacements between original (reference) and 
+    input image frames by comparing red centroid positions.
+    
+    Args:
+        frame (numpy.ndarray): Input image frame.
+        orgCenterPtL (list of tuples): Centroid positions in the reference image.
+        imgPath (str): Path to current image (for debug outputs).
+        minArea (int): Minimum contour area for detection.
+    
+    Returns:
+        trkImg (numpy.ndarray): Visualization with tracking arrows drawn.
+        redMask (numpy.ndarray): Binary mask of detected red markers.
+        org (numpy.ndarray): Original copy of input image.
+        centerPtList (list of tuples): Detected centroid coordinates.
+        dx (numpy.ndarray): x-displacements of whiskers.
+        dy (numpy.ndarray): y-displacements of whiskers.
+    """
     org = frame.copy()
     trkImg = frame.copy()
     redMask, centerPtList, redFindFlag = imgRedFindCentroid(frame, minArea)
@@ -201,5 +290,13 @@ def imgRedCentroidTrack(frame, orgCenterPtL, imgPath, minArea = 10):
         dy.append(centerPtList[i][1] - orgCenterPtL[i][1])
     dx = np.array(dx)
     dy = np.array(dy)
-    return frame, redMask, org, centerPtList, dx, dy
+    # return frame, redMask, org, centerPtList, dx, dy
+    return trkImg, redMask, org, centerPtList, dx, dy
 
+if __name__ == "__main__":
+    img = cv2.imread("img/actuated.jpg")
+    img = imgPreProcess(img)
+    trkImg, redMask, org, centerPtList, dx, dy = imgRedCentroidTrack(img, orgCenterPtList, "img/actuated.png")
+    cv2.imshow("Track", trkImg)
+    cv2.imshow("Original", orgImg)
+    cv2.waitKey(0)
