@@ -1,5 +1,5 @@
 # Vibrissae-Inspired-Vision-Based-Magnetic-Actuated-Whisker
-This is the code for the paper "Vibrissae-Inspired Vision-Based Magnetic-Actuated Whisker".
+This is the code for the paper "[Vibrissae-Inspired Vision-Based Magnetic-Actuated Whisker](https://doi.org/10.1038/s41467-025-67672-x)".
 
 ## Requirements
 
@@ -178,6 +178,21 @@ python airflowCharacterizationOffline.py --csv data/airflow/airflowDemoData.csv 
   `airflowCharacterizationRealtime.py`, ensuring consistency with the live pipeline.
 * The demo uses `numWhisker = 1`. To extend to multiple whiskers, provide
   per-whisker columns or stacked CSVs and adapt loading accordingly.
+* The raw image sequences have been deposited in the Zenodo database via the link: [https://doi.org/10.5281/zenodo.17554484](https://doi.org/10.5281/zenodo.17554484).
 
+## Cite this article
+
+Hu, Z., Cheng, Y., Wachs, J. et al. Vibrissae-inspired vision-based magnetic-actuated whisker. Nat Commun (2025). https://doi.org/10.1038/s41467-025-67672-x
+```bibtex
+@article{hu2025vibrissae,
+  title={Vibrissae-inspired vision-based magnetic-actuated whisker},
+  author={Hu, Zhixian and Cheng, Yi and Wachs, Juan and She, Yu},
+  journal={Nature Communications},
+  year={2025},
+  doi={10.1038/s41467-025-67672-x},
+  url={https://doi.org/10.1038/s41467-025-67672-x},
+  issn={2041-1723},
+  publisher={Nature Publishing Group UK London}
+}
 
 
